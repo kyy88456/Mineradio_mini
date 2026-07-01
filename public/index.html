@@ -3388,7 +3388,7 @@ function readSavedPlaybackVisualPreset() {
   try {
     var raw = JSON.parse(localStorage.getItem(LYRIC_LAYOUT_STORE_KEY) || '{}') || {};
     if (!Object.prototype.hasOwnProperty.call(raw, 'preset')) return fxDefaults.preset;
-    var savedPreset = clampRange(Number(raw.preset) || 0, 0, 6);
+    var savedPreset = clampRange(Number(raw.preset) || 0, 0, presetMeta.length - 1);
     if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) savedPreset = 5;
     return savedPreset;
   } catch (e) {
@@ -6152,7 +6152,7 @@ void main(){
   //  Layered music-particle wallpaper: aurora ribbons, depth sparks,
   //  and cover-colored audio flow.
   // ====================================================
-  else {
+  else if (uPreset < 7.0) {
     float bassGlow = smoothstep(0.07, 0.78, uBass) * 0.34 + uBeat * 0.014;
     float midGlow = smoothstep(0.07, 0.62, uMid) * 0.42;
     float highGlow = smoothstep(0.04, 0.46, uTreble) * 0.46;
@@ -6224,6 +6224,98 @@ void main(){
   }
 
   // ====================================================
+  //  Preset 7: SAKURA DRIFT — 樱花雨
+  //  浪漫 · 粒子从上方缓缓飘落, 受 uMid 控 x 摆幅, uTreble 控 y 抖动
+  //  uBass 触发花瓣局部放大, 花瓣颜色粉白渐变
+  // ====================================================
+  else if (uPreset < 8.0) {
+    float fallSeed = aRand;
+    float fallPhase = fract(fallSeed * 1.7 + t * 0.020);
+    float startY = 3.4 + fallSeed * 1.2;
+    float endY   = -3.0 - fallSeed * 0.6;
+    float yPos   = mix(startY, endY, fallPhase);
+    float swayAmp = 0.55 + fallSeed * 0.85;
+    float swayFreq = 0.42 + fallSeed * 0.28;
+    float swayX = sin(t * swayFreq + fallSeed * 6.2831) * swayAmp;
+    float jitter = snoise(vec3(fallSeed * 8.0, t * 0.55, fallSeed * 1.3)) * (0.18 + uTreble * 0.55);
+    float spin = t * (0.08 + fallSeed * 0.10) + fallSeed * 6.2831;
+    float cs = cos(spin), sn = sin(spin);
+    vec2 xy = vec2(swayX + jitter, yPos);
+    pos.xy = xy;
+    pos.z = sin(spin) * 0.18 + uBass * (0.18 + fallSeed * 0.42) * step(0.86, fract(fallSeed * 31.0 + t * 0.6));
+
+    vec3 pink = vec3(1.00, 0.84, 0.90);
+    vec3 white = vec3(0.99, 0.95, 0.97);
+    vec3 petal = mix(pink, white, smoothstep(0.0, 1.0, fract(fallSeed * 4.3)));
+    petal = mix(petal, vec3(0.66, 0.86, 0.92), step(0.92, fract(fallSeed * 17.0)) * 0.65);
+    vColor = petal;
+    vAlpha = 0.55 + 0.30 * sin(t * 0.7 + fallSeed * 12.0);
+    maxRippleAmp = 0.0;
+  }
+
+  // ====================================================
+  //  Preset 8: FIREFLY GROVE — 萤火之森
+  //  浪漫 · 稀疏 AdditiveBlending 闪烁粒子, 暖黄/冷青随机
+  //  每个粒子独立闪烁相位, 周围 1.2 单位半径亮度被抬升
+  // ====================================================
+  else if (uPreset < 9.0) {
+    vec3 groveCenter = vec3(0.0, 0.1, 0.0);
+    float treeR = 1.4 + 0.55 * sin(t * 0.13 + aRand * 4.0);
+    float ang = aRand * 6.2831 + t * (0.05 + aRand * 0.04);
+    float rad = 0.6 + aRand * 1.7;
+    vec3 base = groveCenter + vec3(
+      cos(ang) * rad * (1.0 + sin(t * 0.18 + aRand * 5.0) * 0.08),
+      sin(ang * 0.7) * rad * 0.55 + snoise(vec3(aRand * 3.1, t * 0.20, 1.7)) * 0.45,
+      sin(ang) * rad * 0.5 + cos(t * 0.16 + aRand * 2.0) * 0.3
+    );
+    float flicker = 0.45 + 0.55 * sin(t * (0.8 + aRand * 1.6) + aRand * 12.0);
+    float bassKick = uBass * 0.55;
+    pos = base + vec3(0.0, sin(t * 0.5 + aRand * 9.0) * 0.10, 0.0) * (1.0 + bassKick);
+
+    float warmPick = step(0.5, aRand);
+    vec3 warm = vec3(1.00, 0.95, 0.66);
+    vec3 cool = vec3(0.60, 1.00, 0.82);
+    vec3 fire = mix(cool, warm, warmPick);
+    fire = mix(fire, vec3(1.0), flicker * 0.45);
+    vColor = fire;
+    vAlpha = 0.40 + flicker * 0.50;
+    vBright = 0.70 + flicker * 0.85 + bassKick * 0.30;
+    maxRippleAmp = flicker * 0.20;
+  }
+
+  // ====================================================
+  //  Preset 9: AURORA RIBBON — 极光丝带
+  //  绚丽 · 3 条前景彩色丝带, fbm 噪声 + 时间偏移飘动
+  //  与 preset 5 wallpaper 的"大面积包裹极光"区分: 这里是纯前景紧凑条带
+  // ====================================================
+  else {
+    float ribbonPick = aRand;
+    float band = floor(ribbonPick * 3.0);
+    float bandN = (band + 0.5) / 3.0;
+    float fall = fract(ribbonPick * 3.0 + t * (0.18 + bandN * 0.10));
+
+    float ribbonFreq = 1.05 + bandN * 0.45;
+    float ribbonAmp  = 0.95 + bandN * 0.35;
+    float ribbonY    = (bandN - 0.5) * 3.0;
+    float wave = sin(fall * ribbonFreq * 6.2831 + t * (0.32 + bandN * 0.18) + bandN * 4.1) * ribbonAmp;
+    float fbm = snoise(vec3(fall * 2.4 + bandN, t * 0.22, bandN * 1.7)) * 0.55
+              + snoise(vec3(fall * 5.0 + bandN * 2.0, t * 0.45, bandN * 3.3)) * 0.28;
+
+    pos.x = (aRand - 0.5) * 6.4 + wave * (0.55 + uMid * 0.35);
+    pos.y = ribbonY + fbm * (0.85 + uTreble * 0.40) + sin(t * 0.42 + bandN * 7.0) * 0.18;
+    pos.z = 0.85 + bandN * 0.40 + uBass * 0.20 * sin(bandN * 9.0 + t * 0.6);
+
+    vec3 ribbonA = vec3(0.45, 0.95, 0.78);
+    vec3 ribbonB = vec3(0.65, 0.55, 1.00);
+    vec3 ribbonC = vec3(1.00, 0.78, 0.55);
+    vec3 ribbon = band < 0.5 ? ribbonA : (band < 1.5 ? ribbonB : ribbonC);
+    ribbon = mix(ribbon, vec3(1.0), 0.18 + fbm * 0.30 + uEnergy * 0.10);
+    vColor = ribbon;
+    vAlpha = 0.50 + 0.30 * sin(t * 0.65 + bandN * 6.0) + uEnergy * 0.12;
+    maxRippleAmp = 0.04 + uBass * 0.06;
+  }
+
+  // ====================================================
   //  鼠标交互 (仅 SILK)
   // ====================================================
   if (uMouseActive > 0.5 && uPreset < 0.5) {
@@ -6277,18 +6369,18 @@ void main(){
   float edgeBoost = uEdgeEnabled * edgeVal * mix(1.0, 0.42, vinylHiResGuard);
   vSourceLum = dot(max(vColor, vec3(0.0)), vec3(0.299, 0.587, 0.114));
   float blackParticleGuard = 1.0 - smoothstep(0.025, 0.115, vSourceLum);
-  vEdgeBoost = edgeBoost * (uPreset > 3.5 ? 0.22 : 1.0) * (1.0 - blackParticleGuard);
+  vEdgeBoost = edgeBoost * ((uPreset > 3.5 && uPreset < 7.0) ? 0.22 : 1.0) * (1.0 - blackParticleGuard);
   vColor = pow(max(vColor, vec3(0.0)), vec3(1.0 / max(0.35, uColorBoost)));
-  float edgeColorMix = edgeBoost * (uPreset > 3.5 ? 0.20 : 0.50) * (1.0 - blackParticleGuard);
+  float edgeColorMix = edgeBoost * ((uPreset > 3.5 && uPreset < 7.0) ? 0.20 : 0.50) * (1.0 - blackParticleGuard);
   vColor = mix(vColor, vColor + vec3(0.20), edgeColorMix);
   float tintLum = max(max(vColor.r, vColor.g), vColor.b);
   vec3 tintedColor = uTintColor * max(0.24, tintLum * 1.12);
   vColor = mix(vColor, tintedColor, clamp(uTintStrength, 0.0, 1.0) * (1.0 - blackParticleGuard));
 
   vBright = 0.82 + maxRippleAmp * 0.55 + uBass * 0.10 + edgeBoost * 0.30 + uEnergy * 0.05 + uBurstAmt * 0.40;
-  if (uPreset > 4.5) {
+  if (uPreset > 4.5 && uPreset < 7.0) {
     vBright = 0.94 + maxRippleAmp * 0.34 + uBass * 0.020 + uEnergy * 0.026 + uBurstAmt * 0.025;
-  } else if (uPreset > 3.5) {
+  } else if (uPreset > 3.5 && uPreset < 7.0) {
     vBright = 0.94 + maxRippleAmp * 0.64 + uBass * 0.08 + edgeBoost * 0.12 + uEnergy * 0.05 + uBeat * 0.16 + uBurstAmt * 0.16;
   }
   vRipple = clamp(maxRippleAmp * 1.5, 0.0, 1.0);
@@ -6333,10 +6425,10 @@ void main(){
   float depthSize = 36.0 / max(0.5, -mvPos.z);
   float audioBoost = 1.0 + maxRippleAmp * 0.7 + edgeBoost * 0.55 + uBeat * 0.30 + uBurstAmt * 0.5;
   float sz = clamp(depthSize * audioBoost, 1.05, 4.95);
-  if (uPreset > 4.5) {
+  if (uPreset > 4.5 && uPreset < 7.0) {
     float flowDrive = uBass * 0.070 + uMid * 0.046 + uTreble * 0.060 + uBurstAmt * 0.090 + uBeat * 0.055;
     sz = clamp(depthSize * (1.05 + flowDrive), 1.00, 5.45);
-  } else if (uPreset > 3.5) {
+  } else if (uPreset > 3.5 && uPreset < 7.0) {
     float ringDrive = uBass * 0.30 + uMid * 0.18 + uTreble * 0.22 + uBeat * 0.30;
     sz = clamp(depthSize * (0.90 + ringDrive * 0.62), 1.05, 3.90);
   }
@@ -7550,7 +7642,7 @@ function readSavedLyricLayout() {
   try {
     var savedLayoutRaw = localStorage.getItem(LYRIC_LAYOUT_STORE_KEY);
     var raw = savedLayoutRaw ? (JSON.parse(savedLayoutRaw) || {}) : packagedDefaultLyricLayoutRaw();
-    var savedPreset = clampRange(Number(raw.preset) || 0, 0, 6);
+    var savedPreset = clampRange(Number(raw.preset) || 0, 0, presetMeta.length - 1);
     if (savedPreset === 3 && raw.visualPresetSchema !== VISUAL_PRESET_SCHEMA) {
       savedPreset = 5;
     }
@@ -20108,6 +20200,9 @@ var presetMeta = [
   { name: '唱片', desc: '唱片 · 圆形封面' },
   { name: '星河', desc: '壁纸粒子 · 音乐律动' },
   { name: '安魂', desc: '骷髅·YUI7W', descHtml: '骷髅·<span class="pc-yui7w">YUI7W</span>' },
+  { name: '樱花雨', desc: '粉白落瓣 · 浪漫' },
+  { name: '萤火之森', desc: '稀疏闪烁 · 留白' },
+  { name: '极光丝带', desc: '前景彩带 · 绚丽' },
 ];
 var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 14c3-2 5-2 8 0s5 2 8 0M3 10c3-2 5-2 8 0s5 2 8 0M3 18c3-2 5-2 8 0s5 2 8 0"/></svg>',
@@ -20117,8 +20212,11 @@ var presetIcons = [
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.4"/><path d="M16.5 5.2c2.1.9 3.4 2.4 4 4.5"/><path d="M18.8 3.2l1.5 4.8"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 15c2.2-4.4 4.4-4.4 6.6 0s4.4 4.4 6.6 0S20.6 10.6 23 15"/><path d="M3 9c2.2 2.2 4.4 2.2 6.6 0s4.4-2.2 6.6 0S20.6 11.2 23 9"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/></svg>',
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.2h4v6.2h4.2v3.8H14v7.6h-4v-7.6H5.8V9.4H10z"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5c-1.4 2.6-3.6 4.4-3.6 7.4 0 2 1.6 3.6 3.6 3.6s3.6-1.6 3.6-3.6c0-3-2.2-4.8-3.6-7.4z"/><path d="M5 16.5c1.4-1.4 3-1.6 4.2-1.2"/><path d="M19 16.5c-1.4-1.4-3-1.6-4.2-1.2"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="9" r="0.9" fill="currentColor"/><circle cx="15" cy="14" r="0.7" fill="currentColor"/><circle cx="11" cy="17" r="0.8" fill="currentColor"/><circle cx="17" cy="8" r="0.6" fill="currentColor"/><circle cx="6" cy="14" r="0.55" fill="currentColor"/><path d="M9 10.5c1.5 1 2.5 2.5 3 4.5" stroke-dasharray="1.2 1.6"/></svg>',
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 8c4 0 4 6 8 6s4-6 8-6"/><path d="M3 14c4 0 4 4 8 4s4-4 8-4"/><path d="M3 5c3 0 3 3 6 3" opacity="0.55"/></svg>',
 ];
-var presetDisplayOrder = [0, 6, 5, 4, 2, 1, 3];
+var presetDisplayOrder = [0, 6, 5, 4, 7, 8, 9, 2, 1, 3];
 var lyricColorPresets = [
   { name:'雾蓝', color:'#a9b8c8' },
   { name:'银蓝', color:'#9db8cf' },
@@ -21297,6 +21395,9 @@ function setPreset(p, opts) {
     else if (p === 4) { orbit.userRadius = 6.5; orbit.userPhi = 0.04; orbit.userTheta = 0.0; orbit.baselineRadius = 6.5; orbit.baselinePhi = 0.04; }
     else if (p === 5) { orbit.userRadius = 9.4; orbit.userPhi = 0.34; orbit.userTheta = -0.52; orbit.baselineRadius = 9.4; orbit.baselinePhi = 0.34; }
     else if (p === 6) { orbit.userRadius = 7.4; orbit.userPhi = 0.10; orbit.userTheta = 0.18; orbit.baselineRadius = 7.4; orbit.baselinePhi = 0.10; }
+    else if (p === 7) { orbit.userRadius = 6.8; orbit.userPhi = 0.04; orbit.userTheta = 0.0; orbit.baselineRadius = 6.8; orbit.baselinePhi = 0.04; }
+    else if (p === 8) { orbit.userRadius = 6.4; orbit.userPhi = 0.06; orbit.userTheta = 0.0; orbit.baselineRadius = 6.4; orbit.baselinePhi = 0.06; }
+    else if (p === 9) { orbit.userRadius = 6.6; orbit.userPhi = 0.05; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.05; }
     else              { orbit.userRadius = 6.6; orbit.userPhi = 0.08; orbit.userTheta = 0.0; orbit.baselineRadius = 6.6; orbit.baselinePhi = 0.08; }
     orbit.baselineTheta = p === 5 ? -0.52 : (p === 6 ? 0.18 : 0.0);
   }
