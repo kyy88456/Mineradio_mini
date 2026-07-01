@@ -37,7 +37,13 @@ const NETEASE_LOGIN_URL = 'https://music.163.com/#/login';
 const QQ_LOGIN_PARTITION = 'persist:mineradio-qqmusic-login';
 const QQ_LOGIN_URL = 'https://y.qq.com/n/ryqq/profile';
 
-const CHROMIUM_PERFORMANCE_SWITCHES = [
+// Real-Chrome-on-Windows UA for login BrowserWindows. Win UA is plausible
+// because the project is Windows-targeted; 163 / Tencent anti-bot libraries
+// fingerprint non-Chrome / Electron UAs.
+const STEALTH_LOGIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const STEALTH_LOGIN_PRELOAD = path.join(__dirname, 'login-stealth-preload.js');
+
+const COMMON_PERFORMANCE_SWITCHES = [
   ['autoplay-policy', 'no-user-gesture-required'],
   ['ignore-gpu-blocklist'],
   ['enable-gpu-rasterization'],
@@ -47,9 +53,19 @@ const CHROMIUM_PERFORMANCE_SWITCHES = [
   ['disable-background-timer-throttling'],
   ['disable-renderer-backgrounding'],
   ['disable-backgrounding-occluded-windows'],
+];
+const WINDOWS_PERFORMANCE_SWITCHES = [
   ['force_high_performance_gpu'],
   ['use-angle', 'd3d11'],
 ];
+const MAC_PERFORMANCE_SWITCHES = [
+  ['use-angle', 'metal'],
+];
+const platformPerformanceSwitches =
+  process.platform === 'win32' ? WINDOWS_PERFORMANCE_SWITCHES
+  : process.platform === 'darwin' ? MAC_PERFORMANCE_SWITCHES
+  : [];
+const CHROMIUM_PERFORMANCE_SWITCHES = [...COMMON_PERFORMANCE_SWITCHES, ...platformPerformanceSwitches];
 for (const [name, value] of CHROMIUM_PERFORMANCE_SWITCHES) {
   if (value == null) app.commandLine.appendSwitch(name);
   else app.commandLine.appendSwitch(name, value);
@@ -423,8 +439,10 @@ async function openNeteaseMusicLoginWindow(owner) {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        preload: STEALTH_LOGIN_PRELOAD,
       },
     });
+    loginWindow.webContents.setUserAgent(STEALTH_LOGIN_UA);
 
     const finish = async (result) => {
       if (settled) return;
@@ -525,8 +543,10 @@ async function openQQMusicLoginWindow(owner) {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        preload: STEALTH_LOGIN_PRELOAD,
       },
     });
+    loginWindow.webContents.setUserAgent(STEALTH_LOGIN_UA);
 
     const finish = async (result) => {
       if (settled) return;
@@ -1325,8 +1345,13 @@ async function createWindow() {
 
   process.env.HOST = '127.0.0.1';
   process.env.PORT = String(port);
-  process.env.COOKIE_FILE = path.join(app.getPath('userData'), '.cookie');
-  process.env.QQ_COOKIE_FILE = path.join(app.getPath('userData'), '.qq-cookie');
+  // Dev mode: cookies live in project root for visibility; packaged builds
+  // keep using per-user `userData` so installed apps follow OS conventions.
+  const cookieDir = app.isPackaged
+    ? app.getPath('userData')
+    : path.join(__dirname, '..');
+  process.env.COOKIE_FILE = path.join(cookieDir, '.cookie');
+  process.env.QQ_COOKIE_FILE = path.join(cookieDir, '.qq-cookie');
   process.env.MINERADIO_UPDATE_DIR = getUpdateDownloadDir();
   try {
     const legacyQQCookie = path.join(__dirname, '..', '.qq-cookie');
@@ -1338,6 +1363,23 @@ async function createWindow() {
     }
   } catch (e) {
     console.warn('QQ cookie migration skipped:', e.message);
+  }
+  // One-shot migration: if a cookie exists in userData from a previous install
+  // (or a packaged run that wrote there), copy it into project root and clean
+  // up so we don't silently keep reading from the old location.
+  if (!app.isPackaged) {
+    for (const fileName of ['.cookie', '.qq-cookie']) {
+      try {
+        const userDataFile = path.join(app.getPath('userData'), fileName);
+        const projectFile = path.join(__dirname, '..', fileName);
+        if (fs.existsSync(userDataFile) && !fs.existsSync(projectFile)) {
+          fs.copyFileSync(userDataFile, projectFile);
+          console.log(`[mineradio] migrated ${fileName} from userData to project root`);
+        }
+      } catch (e) {
+        console.warn(`Cookie migration skipped for ${fileName}:`, e.message);
+      }
+    }
   }
 
   localServer = require(path.join(__dirname, '..', 'server.js'));
