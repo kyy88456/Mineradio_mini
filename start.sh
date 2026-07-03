@@ -43,5 +43,12 @@ else
 fi
 
 # ---- 2. Launch dev mode. exec replaces bash so Ctrl+C reaches npm directly. ----
+# MINERADIO_FORCE_DIY=1 会在主窗口 URL 末尾追加 ?diy=1，强制进入
+# DIY 模式并显示 FX 面板（默认 simple-mode 会隐藏面板入口）。设置
+# 环境变量即可：MINERADIO_FORCE_DIY=1 bash start.sh
+if [ "${MINERADIO_FORCE_DIY:-0}" = "1" ]; then
+  echo "[start.sh] MINERADIO_FORCE_DIY=1 — dev 启动将强制进入 DIY 模式 (FX 面板可见)"
+  export MINERADIO_FORCE_DIY=1
+fi
 echo "[start.sh] Starting: npm start (Ctrl+C to quit)"
 exec npm start
